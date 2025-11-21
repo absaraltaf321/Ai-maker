@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Flowchart Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --bg-alt: #eff4f8;
+        --bg-panel: #ffffff;
+        --bg-panel-alt: #f0f7fb;
+        --bg-panel-header: #3b82f6;
+        --bg-panel-header-dark: #2563eb;
+        --bg-grad-node-1: #ffffff;
+        --bg-grad-node-2: #f0f5fa;
+        --bg-grad-icon-1: #eef5fc;
+        --bg-grad-icon-2: #dbe9f7;
+        --bg-grad-side-panel-1: #f3f8fb;
+        --bg-grad-side-panel-2: #e9f1f6;
+        --bg-grad-title-1: #475569;
+        --bg-grad-title-2: #334155;
+        --sidefill: #ffffff;
+        --text: #1e293b;
+        --text-light: #f8fafc;
+        --text-muted: #64748b;
+        --text-accent: #2563eb;
+        --text-header: #ffffff;
+        --border-light: #e2e8f0;
+        --border-med: #cbd5e1;
+        --border-dark: #94a3b8;
+        --border-accent: #64748b;
+        --shadow-color: rgba(100, 116, 139, 0.12);
+        --shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -2px var(--shadow-color);
+        --shadow-lg: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -4px var(--shadow-color);
+        --font: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      .dark {
+        --bg: #0f172a;
+        --bg-alt: #1e293b;
+        --bg-panel: #1e293b;
+        --bg-panel-alt: #334155;
+        --bg-panel-header: #3b82f6;
+        --bg-panel-header-dark: #60a5fa;
+        --bg-grad-node-1: #475569;
+        --bg-grad-node-2: #334155;
+        --bg-grad-icon-1: #334155;
+        --bg-grad-icon-2: #1e293b;
+        --bg-grad-side-panel-1: #334155;
+        --bg-grad-side-panel-2: #1e293b;
+        --bg-grad-title-1: #475569;
+        --bg-grad-title-2: #334155;
+        --sidefill: #475569;
+        --text: #e2e8f0;
+        --text-light: #f8fafc;
+        --text-muted: #94a3b8;
+        --text-accent: #60a5fa;
+        --text-header: #ffffff;
+        --border-light: #334155;
+        --border-med: #475569;
+        --border-dark: #64748b;
+        --border-accent: #94a3b8;
+        --shadow-color: rgba(0, 0, 0, 0.25);
+      }
+      body {
+        font-family: var(--font);
+        background-color: var(--bg);
+        color: var(--text);
+        transition: background-color 0.3s, color 0.3s;
+      }
+      .svg-draggable {
+        cursor: move;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

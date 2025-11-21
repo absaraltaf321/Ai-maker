@@ -1,0 +1,5 @@
+{
+  "name": "AI Flowchart Generator",
+  "description": "An interactive web application that uses Gemini 2.5 Pro to generate flowchart data from a text prompt and renders it as a downloadable SVG. Users can specify a topic and level of detail to create complex diagrams instantly.",
+  "requestFramePermissions": []
+}
