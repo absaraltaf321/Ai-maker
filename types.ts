@@ -58,6 +58,11 @@ export interface SupportingPanel {
   items: SupportingPanelItem[];
 }
 
+export enum DiagramType {
+  FLOWCHART = 'Flowchart',
+  MINDMAP = 'Mind Map',
+}
+
 export interface FlowchartData {
   title: string;
   caption: string;
@@ -70,15 +75,11 @@ export interface FlowchartData {
   connectors: Connector[];
   sideBoxes?: SideBox[];
   supportingPanel?: SupportingPanel;
+  diagramType?: DiagramType;
 }
 
 export enum DepthLevel {
   SIMPLE = 'Simple',
   DETAILED = 'Detailed',
   EXPERT = 'Expert',
-}
-
-export enum DiagramType {
-  FLOWCHART = 'Flowchart',
-  MINDMAP = 'Mind Map',
 }

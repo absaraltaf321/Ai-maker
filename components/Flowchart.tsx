@@ -39,12 +39,11 @@ const useDraggable = (
         }
 
         e.stopPropagation();
-        e.preventDefault(); // Prevent scrolling on touch
+        e.preventDefault(); // Prevent default browser scrolling
         
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         
-        // Adjust delta by scale
         const dx = (clientX - dragState.start.x) / scale;
         const dy = (clientY - dragState.start.y) / scale;
         
@@ -83,10 +82,7 @@ const useDraggable = (
 
     const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
         e.stopPropagation();
-        // Only left click
         if ('button' in e && e.button !== 0) return;
-        
-        // Ignore if multi-touch start
         if ('touches' in e && e.touches.length > 1) return;
 
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -222,7 +218,6 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, o
     useLayoutEffect(() => {
         if (contentRef.current) {
             const contentHeight = contentRef.current.scrollHeight;
-            // Add padding
             const newHeight = Math.max(86, contentHeight + 40); 
             if (Math.abs(newHeight - node.size.h) > 5) {
                onSizeChange(node.id, { w: node.size.w, h: newHeight });
@@ -232,8 +227,6 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, o
 
     const { x, y } = position;
     const { w, h } = node.size;
-
-    // Determine Icon Y Position
     const iconY = diagramType === DiagramType.MINDMAP ? 43 : h / 2;
 
     return (
@@ -326,7 +319,6 @@ const Flowchart: React.FC<FlowchartProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const latestState = useRef({ zoom, pan });
 
-  // Update refs
   useLayoutEffect(() => {
       latestState.current = { zoom, pan };
   });
@@ -342,7 +334,7 @@ const Flowchart: React.FC<FlowchartProps> = ({
 
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        e.preventDefault(); // Prevent default browser behavior
+        e.preventDefault(); 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         startDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -373,7 +365,6 @@ const Flowchart: React.FC<FlowchartProps> = ({
            let newZoom = startZoom * scale;
            newZoom = Math.max(0.2, Math.min(3, newZoom));
 
-           // Pan formula: P_new = P_old + ScreenCenter * (1/Z_new - 1/Z_old)
            const newPanX = startPan.x + center.x * (1/newZoom - 1/startZoom);
            const newPanY = startPan.y + center.y * (1/newZoom - 1/startZoom);
            
@@ -392,6 +383,15 @@ const Flowchart: React.FC<FlowchartProps> = ({
     };
   }, []);
 
+  const titleLen = data.title.length;
+  const ringWidth = Math.min(data.canvas.width - 40, Math.max(500, titleLen * 24 + 100));
+  const ringX = -ringWidth / 2;
+
+  const vbWidth = window.innerWidth / zoom;
+  const vbHeight = window.innerHeight / zoom;
+  const vbX = -canvasPan.x;
+  const vbY = -canvasPan.y;
+
   return (
     <div 
         ref={containerRef}
@@ -402,7 +402,7 @@ const Flowchart: React.FC<FlowchartProps> = ({
         ref={svgRef}
         width="100%"
         height="100%"
-        viewBox={`${-canvasPan.x} ${-canvasPan.y} ${window.innerWidth / zoom} ${window.innerHeight / zoom}`}
+        viewBox={`${vbX} ${vbY} ${vbWidth} ${vbHeight}`}
         className="block"
         style={{ touchAction: 'none' }}
       >
@@ -427,31 +427,116 @@ const Flowchart: React.FC<FlowchartProps> = ({
             <stop offset="0%" stopColor="var(--bg-grad-side-panel-1)" />
             <stop offset="100%" stopColor="var(--bg-grad-side-panel-2)" />
           </linearGradient>
+           {/* Neon Ring Gradient */}
+           <linearGradient id="grad-neon-ring" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="var(--text-accent)" stopOpacity="0.6" />
+                <stop offset="20%" stopColor="#ffffff" stopOpacity="0.9" />
+                <stop offset="50%" stopColor="var(--text-accent)" stopOpacity="0.6" />
+                <stop offset="80%" stopColor="#ffffff" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="var(--text-accent)" stopOpacity="0.6" />
+          </linearGradient>
           <filter id="ds-sm" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="var(--shadow-color)" />
           </filter>
           <filter id="ds-lg" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="var(--shadow-color)" />
           </filter>
+          <filter id="neon-glow" filterUnits="userSpaceOnUse" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+            <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+          </filter>
+           <filter id="text-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+             <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="var(--border-dark)" />
           </marker>
         </defs>
 
-        <g transform={`scale(${zoom})`}>
-             {/* Canvas Background Area */}
-            <rect x="0" y="0" width={data.canvas.width} height={data.canvas.height} fill="var(--bg)" stroke="var(--border-light)" strokeDasharray="5 5" />
+        <g>
+             {/* Canvas Background Area with Neon Outline - Removed non-scaling-stroke to allow zoom consistency */}
+            <rect 
+                x="2" 
+                y="2" 
+                width={data.canvas.width - 4} 
+                height={data.canvas.height - 4} 
+                fill="var(--bg)" 
+                stroke="var(--text-accent)" 
+                strokeWidth="2" 
+                rx="20"
+                filter="url(#neon-glow)"
+                opacity="0.8"
+            />
+             <rect 
+                x="8" 
+                y="8" 
+                width={data.canvas.width - 16} 
+                height={data.canvas.height - 16} 
+                fill="none" 
+                stroke="var(--text-accent)" 
+                strokeWidth="1" 
+                rx="16"
+                opacity="0.3"
+            />
             
-            {/* Header Image or Title */}
-            {data.headerImage ? (
-                <image href={data.headerImage} x="0" y="0" width={data.canvas.width} height={Math.min(300, data.canvas.height/3)} preserveAspectRatio="xMidYMid slice" opacity="0.9"/>
-            ) : (
-                 <g>
-                     <rect x="0" y="0" width={data.canvas.width} height="150" fill="url(#grad-header)" opacity="0.1"/>
-                     <text x={data.canvas.width/2} y="80" textAnchor="middle" fontSize="32" fontWeight="bold" fill="var(--text)">{data.title}</text>
-                     <text x={data.canvas.width/2} y="110" textAnchor="middle" fontSize="16" fill="var(--text-muted)">{data.caption}</text>
-                 </g>
-            )}
+            {/* Header: Neon Ring with Text */}
+             <g transform={`translate(${data.canvas.width/2}, 80)`}>
+                 {/* Neon Ring Capsule */}
+                 <rect 
+                    x={ringX} y="-50" 
+                    width={ringWidth} height="90" 
+                    rx="45" 
+                    fill="var(--bg-alt)"
+                    stroke="url(#grad-neon-ring)" 
+                    strokeWidth="4"
+                    filter="url(#neon-glow)"
+                 />
+                 {/* Inner Detail Ring */}
+                  <rect 
+                    x={ringX + 10} y="-40" 
+                    width={ringWidth - 20} height="70" 
+                    rx="35" 
+                    fill="none" 
+                    stroke="var(--text-accent)" 
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                 />
+                 
+                 {/* Main Title */}
+                 <text 
+                    x="0" y="12" 
+                    textAnchor="middle" 
+                    fontSize="32" 
+                    fontWeight="800" 
+                    letterSpacing="0.1em"
+                    fill="var(--text)"
+                    style={{ 
+                        filter: 'url(#text-glow)',
+                        textTransform: 'uppercase'
+                    }}
+                >
+                    {data.title}
+                </text>
+                
+                {/* Decoration Lines */}
+                <path d={`M -60 25 L 60 25`} stroke="var(--text-accent)" strokeWidth="2" opacity="0.6" />
+
+                {/* Caption below */}
+                 <text 
+                    x="0" y="65" 
+                    textAnchor="middle" 
+                    fontSize="14" 
+                    fontWeight="500"
+                    fill="var(--text-muted)"
+                    letterSpacing="0.05em"
+                >
+                    {data.caption}
+                </text>
+             </g>
             
             {/* Connectors */}
             {data.connectors.map(conn => {
@@ -484,6 +569,7 @@ const Flowchart: React.FC<FlowchartProps> = ({
                         strokeDasharray={conn.style?.strokeDasharray}
                         fill="none" 
                         markerEnd={diagramType === DiagramType.MINDMAP ? "" : "url(#arrowhead)"} 
+                        vectorEffect="non-scaling-stroke"
                     />
                 );
             })}
@@ -512,8 +598,8 @@ const Flowchart: React.FC<FlowchartProps> = ({
                 
                 return (
                     <g key={box.id}>
-                         <path d={`M ${ax} ${ay} L ${bx} ${ay}`} stroke="var(--border-dark)" strokeWidth="1" strokeDasharray={box.lineStyle === 'dotted' ? '3 3' : ''} />
-                         <rect x={bx} y={by} width={box.size.w} height={box.size.h} rx={4} fill="var(--bg-panel-alt)" stroke="var(--border-med)" />
+                         <path d={`M ${ax} ${ay} L ${bx} ${ay}`} stroke="var(--border-dark)" strokeWidth="1" strokeDasharray={box.lineStyle === 'dotted' ? '3 3' : ''} vectorEffect="non-scaling-stroke" />
+                         <rect x={bx} y={by} width={box.size.w} height={box.size.h} rx={4} fill="var(--bg-panel-alt)" stroke="var(--border-med)" vectorEffect="non-scaling-stroke" />
                          <foreignObject x={bx} y={by} width={box.size.w} height={box.size.h}>
                              <div className="flex items-center justify-center h-full text-xs text-center p-2 text-[var(--text-muted)]">
                                  {box.text}
@@ -538,13 +624,14 @@ const Flowchart: React.FC<FlowchartProps> = ({
             <circle 
                 cx={data.canvas.width} 
                 cy={data.canvas.height} 
-                r={8 / zoom} 
-                fill="white" 
+                r={10 / zoom} 
+                fill="var(--bg-panel)" 
                 stroke="var(--text-accent)" 
                 strokeWidth={2} 
                 cursor="nwse-resize"
-                className="svg-draggable"
+                className="svg-draggable shadow-lg"
                 {...resizeDrag}
+                vectorEffect="non-scaling-stroke"
             />
         </g>
       </svg>

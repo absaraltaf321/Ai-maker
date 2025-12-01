@@ -29,8 +29,9 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
   } else if (type === DiagramType.MINDMAP) {
       layoutInstructions = `
       **Layout Strategy: MIND MAP**
+      - **Canvas Size**: STRICTLY set canvas width to 1700 and height to 1700.
       - **Structure**: Central Root Node -> Branches (Level 1) -> Sub-branches (Level 2).
-      - **Positions**: Place the **Main Topic** node strictly in the center of the canvas (e.g., x: 600, y: 600).
+      - **Positions**: Place the **Main Topic** node strictly in the center of the canvas (x: 850, y: 850) - centering the node based on its width.
       - **Radial Layout**: Radiate Level 1 nodes outwards in a circle around the center. Place Level 2 nodes further out from their parents.
       - **Sizing (CRITICAL)**: 
           - **Width**: Approx formula: (title_chars * 11) + 80. Min: 200, Max: 400.
@@ -38,7 +39,7 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
       - **Visuals**: Nodes will be rendered as rounded rectangles.
       - **Connectors**: Use straight lines connecting Parent to Child. Do NOT use arrows.
       - **Cleanliness**: Do NOT use 'supportingPanel' or 'sideBoxes'.
-      - **Spacing**: Spread nodes out significantly (canvas is 1200x1200+).
+      - **Spacing**: Spread nodes out significantly to fill the 1700x1700 canvas.
       `;
   }
 
@@ -51,7 +52,6 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
     ${layoutInstructions}
 
     **General Constraints:**
-    - Ensure all elements fit within a canvas of width 1200 and height 1200.
     - For 'Simple', use fewer nodes.
     - For 'Detailed' or 'Expert', increase the number of nodes and complexity espeically in mind map about 6-9 .
   `;
@@ -73,7 +73,10 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
     }
     
     // The API should return a valid JSON object because of responseSchema
-    return JSON.parse(jsonText) as FlowchartData;
+    const data = JSON.parse(jsonText) as FlowchartData;
+    // Inject the diagram type into the data
+    data.diagramType = type;
+    return data;
 
   } catch (error) {
     console.error("Error generating flowchart from Gemini:", error);
@@ -113,35 +116,6 @@ export const generateNodeImage = async (nodeTitle: string, nodeDescription: stri
   } catch (error) {
     console.error("Error generating node image:", error);
     throw new Error("Failed to generate image. Please try again.");
-  }
-};
-
-export const generateHeaderImage = async (topic: string, title: string): Promise<string> => {
-  // Requesting 4:1 aspect ratio (e.g., 1200x300) to match the UI container (600x150) better than 6:1.
-  const prompt = `Create a wide header image (aspect ratio 4:1, e.g., 1200x300) for a flowchart about "${topic}".
-  The image MUST include the title text only : "${title}" clearly in the center.
-   it should be a good blend of black and white, font used should be leage spartan 
-  Ensure the text is vertically centered and fits within the banner.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: prompt }],
-      },
-      config: {
-          responseModalities: [Modality.IMAGE],
-      },
-    });
-
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    if (part && part.inlineData && part.inlineData.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
-    return '';
-  } catch (error) {
-    console.error("Error generating header image:", error);
-    return '';
   }
 };
 

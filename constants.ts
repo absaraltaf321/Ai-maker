@@ -5,7 +5,7 @@ import { FlowchartData } from './types';
 export const DEFAULT_FLOWCHART_DATA: FlowchartData = {
   title: 'THE GASOLINE ENGINE: HOW FUEL BECOMES MOTION',
   caption: 'This flowchart illustrates the four-stroke cycle of a gasoline engine, converting chemical energy into mechanical force.',
-  canvas: { width: 1200, height: 1200 },
+  canvas: { width: 1500, height: 1300 },
   nodes: [
     { id: 'n1', type: 'main', title: 'Air-Fuel Intake', description: 'Mixture drawn into cylinder as piston moves down.', icon: 'droplet', position: { x: 140, y: 320 }, size: { w: 680, h: 86 } },
     { id: 'n2', type: 'main', title: 'Compression', description: 'Piston moves up, squeezing the air-fuel mixture.', icon: 'spring', position: { x: 140, y: 460 }, size: { w: 680, h: 86 } },

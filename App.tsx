@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Controls from './components/Controls';
 import Flowchart from './components/Flowchart';
-import { generateFlowchartJson, generateNodeImage, generateHeaderImage, generateEnhancedDescription } from './services/geminiService';
+import { generateFlowchartJson, generateNodeImage, generateEnhancedDescription } from './services/geminiService';
 import { FlowchartData, DepthLevel, Position, Node as NodeType, DiagramType, Size } from './types';
 import { DEFAULT_FLOWCHART_DATA, THEMES } from './constants';
 
@@ -98,6 +98,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      // 1. Generate the Structure
       const data = await generateFlowchartJson(topic, depth, diagramType);
       
       setFlowchartData(data);
@@ -106,31 +107,48 @@ const App: React.FC = () => {
       setHistoryIndex(0);
       setZoom(1);
       setPan({ x: 0, y: 0 });
+      setIsLoading(false); 
 
-      // Trigger header image generation in background
-      generateHeaderImage(topic, data.title).then(imgUrl => {
-          if (!imgUrl) return;
-          setFlowchartData(prev => {
-              if (!prev) return null;
-              const newData = { ...prev, headerImage: imgUrl };
-              setHistory(h => {
-                  const newH = [...h];
-                  if (newH.length > 0) newH[0] = newData;
-                  return newH;
+      // 2. Auto-Generate Images for Nodes in Background
+      const imagePromises = data.nodes.map(async (node) => {
+          try {
+              const url = await generateNodeImage(node.title, node.description);
+              
+              setFlowchartData(prev => {
+                 if (!prev) return null;
+                 return {
+                     ...prev,
+                     nodes: prev.nodes.map(n => n.id === node.id ? { ...n, imageUrl: url } : n)
+                 };
               });
-              setJsonText(JSON.stringify(newData, null, 2));
-              return newData;
-          });
+              
+              return { id: node.id, url };
+          } catch (e) {
+              console.warn(`Failed to generate image for node ${node.id}`, e);
+              return { id: node.id, url: null };
+          }
       });
 
+      const results = await Promise.all(imagePromises);
+
+      const finalData = {
+          ...data,
+          nodes: data.nodes.map(n => {
+              const res = results.find(r => r.id === n.id);
+              return res && res.url ? { ...n, imageUrl: res.url } : n;
+          })
+      };
+
+      setHistory([finalData]);
+      setJsonText(JSON.stringify(finalData, null, 2));
+
     } catch (err) {
+      setIsLoading(false);
       if (err instanceof Error) {
         setError(err.message);
       } else {
         setError("An unknown error occurred while generating the flowchart.");
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -159,6 +177,7 @@ const App: React.FC = () => {
   const handleDownloadSVG = () => {
     if (!svgRef.current || !flowchartData) return;
 
+    // Use strictly the canvas dimensions to ensure WYSIWYG relative to canvas border
     const width = flowchartData.canvas.width;
     const height = flowchartData.canvas.height;
 
@@ -168,11 +187,6 @@ const App: React.FC = () => {
     svgClone.setAttribute('width', width.toString());
     svgClone.setAttribute('height', height.toString());
     svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-
-    const mainGroup = svgClone.querySelector('g[transform]');
-    if (mainGroup) {
-        mainGroup.removeAttribute('transform'); 
-    }
 
     const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     bgRect.setAttribute('width', width.toString());
@@ -197,18 +211,9 @@ const App: React.FC = () => {
   const handleDownloadPNG = () => {
     if (!svgRef.current || !flowchartData) return;
 
-    let minX = 0;
-    let minY = 0;
-    let maxX = flowchartData.canvas.width;
-    let maxY = flowchartData.canvas.height;
-
-    flowchartData.nodes.forEach(node => {
-        maxX = Math.max(maxX, node.position.x + node.size.w + 50);
-        maxY = Math.max(maxY, node.position.y + node.size.h + 50);
-    });
-    
-    const width = Math.max(flowchartData.canvas.width, maxX);
-    const height = Math.max(flowchartData.canvas.height, maxY);
+    // Use strict canvas dimensions to ensure title centering is correct
+    const width = flowchartData.canvas.width;
+    const height = flowchartData.canvas.height;
     
     const serializer = new XMLSerializer();
     const svgClone = svgRef.current.cloneNode(true) as SVGSVGElement;
@@ -216,11 +221,6 @@ const App: React.FC = () => {
     svgClone.setAttribute('width', width.toString());
     svgClone.setAttribute('height', height.toString());
     svgClone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    
-    const mainGroup = svgClone.querySelector('g[transform]');
-    if (mainGroup) {
-        mainGroup.removeAttribute('transform');
-    }
     
     const computedStyle = getComputedStyle(document.documentElement);
     
@@ -301,16 +301,45 @@ const App: React.FC = () => {
 
   const handleNodePositionChange = useCallback((nodeId: string, newPosition: Position, commit: boolean = true) => {
     if (!flowchartData) return;
-    const newNodes = flowchartData.nodes.map(node => 
-        node.id === nodeId ? { ...node, position: newPosition } : node
-    );
+
+    let newNodes = [...flowchartData.nodes];
+
+    // Check if dragging Root Node in Mind Map
+    // We identify the root as a node that is not a 'to' target in any connector (Assuming connectors flow from Root outwards)
+    const isMindMap = flowchartData.diagramType === DiagramType.MINDMAP || diagramType === DiagramType.MINDMAP;
+    const isRootNode = isMindMap && !flowchartData.connectors.some(c => c.to === nodeId);
+
+    if (isRootNode) {
+        const draggingNode = flowchartData.nodes.find(n => n.id === nodeId);
+        if (draggingNode) {
+            // Calculate Delta
+            const oldPos = draggingNode.position;
+            const dx = newPosition.x - oldPos.x;
+            const dy = newPosition.y - oldPos.y;
+
+            // Move all nodes by delta
+            newNodes = newNodes.map(node => ({
+                ...node,
+                position: {
+                    x: node.position.x + dx,
+                    y: node.position.y + dy
+                }
+            }));
+        }
+    } else {
+        newNodes = newNodes.map(node => 
+            node.id === nodeId ? { ...node, position: newPosition } : node
+        );
+    }
+    
     const newData = { ...flowchartData, nodes: newNodes };
+    
     if (commit) {
         pushToHistory(newData);
     } else {
         setFlowchartData(newData);
     }
-  }, [flowchartData, pushToHistory]);
+  }, [flowchartData, pushToHistory, diagramType]);
 
   const handleNodeSizeChange = useCallback((nodeId: string, newSize: Size) => {
       setFlowchartData(prev => {
@@ -338,14 +367,9 @@ const App: React.FC = () => {
     if (commit) {
         pushToHistory(newData);
     } else {
-        // Live update state without pushing to history
         setFlowchartData(newData);
-        // We don't update JSON text on every drag frame to avoid overhead, only state
     }
   }, [flowchartData, pushToHistory]);
-
-  // Sync JSON text when dragging stops (if we want) or just rely on commit updating history which updates JSON text
-  // Actually pushToHistory updates setJsonText, so it's handled.
 
   const handleNodeEditSave = (newTitle: string, newDesc: string) => {
       if (!editingNode || !flowchartData) return;
@@ -492,7 +516,7 @@ const App: React.FC = () => {
                    <div className="mb-6 flex items-center justify-between border-t border-[var(--border-light)] pt-4">
                       <div className="text-sm">
                           <span className="text-[var(--text)] font-medium">Node Icon</span>
-                          <p className="text-[var(--text-muted)] text-xs">Generate a unique AI icon for this node.</p>
+                          <p className="text-[var(--text-muted)] text-xs">Regenerate the AI icon for this node.</p>
                       </div>
                       <button
                         onClick={handleGenerateNodeImage}
