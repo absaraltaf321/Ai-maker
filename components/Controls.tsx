@@ -26,6 +26,8 @@ interface ControlsProps {
   setTheme: (themeKey: string) => void;
   backgroundColor: string;
   setBackgroundColor: (color: string) => void;
+  nodeCount: number;
+  setNodeCount: (count: number) => void;
 }
 
 const PRESET_COLORS = ['#f8fafc', '#ffffff', '#f0f9ff', '#fef2f2', '#f0fdf4', '#fffbeb', '#f3e8ff', '#1e293b'];
@@ -52,160 +54,188 @@ const Controls: React.FC<ControlsProps> = ({
   currentTheme,
   setTheme,
   backgroundColor,
-  setBackgroundColor
+  setBackgroundColor,
+  nodeCount,
+  setNodeCount
 }) => {
   return (
-    <div className="w-full h-full flex flex-col gap-4 p-4 overflow-y-auto bg-[var(--bg-panel)] border-r border-[var(--border-light)]">
-        <div className="flex-grow flex flex-col">
-            <h1 className="text-xl font-bold mb-4">AI Generator</h1>
+    <div className="w-full h-full flex flex-col p-6 overflow-y-auto bg-[var(--bg-panel)]/90 backdrop-blur-xl border-r border-[var(--border-light)] shadow-2xl">
+        <div className="flex-grow flex flex-col space-y-6">
+            <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-accent)] to-[var(--text)] tracking-tight">
+                AI GEN
+            </h1>
 
-            <div className="mb-4">
-                <label htmlFor="topic" className="block text-sm font-medium mb-2">Topic</label>
-                <input
-                    id="topic"
-                    type="text"
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="e.g., The water cycle"
-                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
-                />
-            </div>
+            {/* Section: Generation */}
+            <div className="space-y-4">
+                <div className="group">
+                    <label htmlFor="topic" className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Topic</label>
+                    <input
+                        id="topic"
+                        type="text"
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="e.g., The water cycle"
+                        className="w-full px-4 py-3 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)] transition-all"
+                    />
+                </div>
 
-            <div className="mb-4">
-                <label htmlFor="diagramType" className="block text-sm font-medium mb-2">Diagram Type</label>
-                <select
-                    id="diagramType"
-                    value={diagramType}
-                    onChange={(e) => setDiagramType(e.target.value as DiagramType)}
-                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
-                >
-                    {Object.values(DiagramType).map(type => (
-                        <option key={type} value={type}>{type}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="mb-4">
-                <label htmlFor="depth" className="block text-sm font-medium mb-2">Level of Detail</label>
-                <select
-                    id="depth"
-                    value={depth}
-                    onChange={(e) => setDepth(e.target.value as DepthLevel)}
-                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
-                >
-                    {Object.values(DepthLevel).map(level => (
-                        <option key={level} value={level}>{level}</option>
-                    ))}
-                </select>
-            </div>
-
-             <div className="mb-4">
-                <label htmlFor="theme" className="block text-sm font-medium mb-2">Color Theme</label>
-                <select
-                    id="theme"
-                    value={currentTheme}
-                    onChange={(e) => setTheme(e.target.value)}
-                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
-                >
-                    {Object.entries(THEMES).map(([key, theme]) => (
-                        <option key={key} value={key}>{theme.name}</option>
-                    ))}
-                </select>
-            </div>
-            
-            <div className="mb-4">
-                <label htmlFor="bgColor" className="block text-sm font-medium mb-2">Background Color</label>
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 bg-[var(--bg)] p-2 rounded-md border border-[var(--border-med)]">
-                        <input
-                            id="bgColor"
-                            type="color"
-                            value={backgroundColor}
-                            onChange={(e) => setBackgroundColor(e.target.value)}
-                            className="h-8 w-12 p-0 border-0 rounded cursor-pointer bg-transparent"
-                        />
-                        <span className="text-xs text-[var(--text-muted)] font-mono">{backgroundColor}</span>
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                         <label htmlFor="diagramType" className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Type</label>
+                        <select
+                            id="diagramType"
+                            value={diagramType}
+                            onChange={(e) => setDiagramType(e.target.value as DiagramType)}
+                            className="w-full px-3 py-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                        >
+                            {Object.values(DiagramType).map(type => (
+                                <option key={type} value={type}>{type}</option>
+                            ))}
+                        </select>
                     </div>
-                    <div className="flex gap-2 flex-wrap">
-                         {PRESET_COLORS.map(c => (
-                            <button 
-                                key={c} 
-                                onClick={() => setBackgroundColor(c)}
-                                className={`w-6 h-6 rounded-full border shadow-sm transition-transform hover:scale-110 ${backgroundColor === c ? 'border-[var(--text-accent)] ring-2 ring-[var(--text-accent)]' : 'border-[var(--border-med)]'}`}
-                                style={{ backgroundColor: c }}
-                                title={c}
-                                aria-label={`Select color ${c}`}
-                            />
+                    <div>
+                        <label htmlFor="depth" className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Detail</label>
+                        <select
+                            id="depth"
+                            value={depth}
+                            onChange={(e) => setDepth(e.target.value as DepthLevel)}
+                            className="w-full px-3 py-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                        >
+                            {Object.values(DepthLevel).map(level => (
+                                <option key={level} value={level}>{level}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {diagramType === DiagramType.MINDMAP && (
+                     <div className="bg-[var(--bg-alt)] p-3 rounded-xl border border-[var(--border-light)]">
+                        <div className="flex justify-between mb-2">
+                             <label htmlFor="nodeCount" className="block text-xs font-bold text-[var(--text-muted)]">NODE COUNT</label>
+                             <span className="text-xs font-mono text-[var(--text-accent)]">{nodeCount}</span>
+                        </div>
+                        <input
+                            id="nodeCount"
+                            type="range"
+                            min="5"
+                            max="30"
+                            step="1"
+                            value={nodeCount}
+                            onChange={(e) => setNodeCount(parseInt(e.target.value))}
+                            className="w-full h-1 bg-[var(--border-med)] rounded-lg appearance-none cursor-pointer accent-[var(--text-accent)]"
+                        />
+                    </div>
+                )}
+
+                 <button
+                    onClick={onGenerate}
+                    disabled={isLoading || !topic}
+                    className="w-full bg-gradient-to-r from-[var(--text-accent)] to-[var(--bg-panel-header-dark)] text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all flex items-center justify-center"
+                >
+                    {isLoading && <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
+                    {isLoading ? 'GENERATING...' : 'GENERATE DIAGRAM'}
+                </button>
+            </div>
+
+            <hr className="border-[var(--border-light)]" />
+
+            {/* Section: Appearance */}
+            <div className="space-y-4">
+                <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Appearance</h2>
+                
+                 <div>
+                    <select
+                        id="theme"
+                        value={currentTheme}
+                        onChange={(e) => setTheme(e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                    >
+                        {Object.entries(THEMES).map(([key, theme]) => (
+                            <option key={key} value={key}>{theme.name}</option>
                         ))}
+                    </select>
+                </div>
+                
+                <div className="flex gap-2 flex-wrap bg-[var(--bg-alt)] p-3 rounded-xl border border-[var(--border-light)]">
+                     {PRESET_COLORS.map(c => (
+                        <button 
+                            key={c} 
+                            onClick={() => setBackgroundColor(c)}
+                            className={`w-6 h-6 rounded-full border-2 shadow-sm transition-transform hover:scale-110 ${backgroundColor === c ? 'border-[var(--text-accent)] scale-110' : 'border-transparent'}`}
+                            style={{ backgroundColor: c }}
+                            title={c}
+                            aria-label={`Select color ${c}`}
+                        />
+                    ))}
+                    <input
+                        type="color"
+                        value={backgroundColor}
+                        onChange={(e) => setBackgroundColor(e.target.value)}
+                        className="w-6 h-6 p-0 border-0 rounded-full overflow-hidden cursor-pointer"
+                    />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-[var(--bg-alt)] rounded-xl border border-[var(--border-light)]">
+                    <label htmlFor="darkModeToggle" className="text-sm font-medium text-[var(--text)]">Dark Mode</label>
+                    <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                        <input type="checkbox" name="toggle" id="darkModeToggle" checked={isDarkMode} onChange={(e) => setDarkMode(e.target.checked)} className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out transform translate-x-0 checked:translate-x-5 checked:bg-[var(--text-accent)] checked:border-0 border-gray-300"/>
+                        <label htmlFor="darkModeToggle" className="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
                     </div>
                 </div>
             </div>
 
-            <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Canvas Dimensions</label>
-                <div className="grid grid-cols-2 gap-2">
-                    <div>
-                        <label htmlFor="canvasWidth" className="text-xs text-[var(--text-muted)]">Width</label>
+            <hr className="border-[var(--border-light)]" />
+
+            {/* Section: Tools */}
+            <div className="space-y-3">
+                 <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Tools</h2>
+                 <button
+                    onClick={onAddNode}
+                    className="w-full bg-[var(--bg-alt)] text-[var(--text-accent)] border border-[var(--border-med)] hover:border-[var(--text-accent)] font-semibold py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                    <span className="text-lg">+</span> Add Node Manually
+                </button>
+                 <button onClick={onDownloadSVG} className="w-full bg-[var(--bg-alt)] text-[var(--text)] border border-[var(--border-med)] font-semibold py-2 px-4 rounded-lg hover:bg-[var(--border-light)] transition-colors text-sm">
+                    Download SVG
+                 </button>
+                 
+                 <div className="pt-2">
+                    <label htmlFor="canvasWidth" className="text-xs text-[var(--text-muted)] block mb-1">Canvas Size</label>
+                    <div className="flex gap-2">
                         <input
-                            id="canvasWidth"
                             type="number"
                             value={canvasWidth}
                             onChange={(e) => onCanvasSizeChange('width', parseInt(e.target.value, 10) || 0)}
-                            className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                            className="w-1/2 px-2 py-1 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded text-xs"
+                            placeholder="W"
                         />
-                    </div>
-                    <div>
-                        <label htmlFor="canvasHeight" className="text-xs text-[var(--text-muted)]">Height</label>
                         <input
-                            id="canvasHeight"
                             type="number"
                             value={canvasHeight}
                             onChange={(e) => onCanvasSizeChange('height', parseInt(e.target.value, 10) || 0)}
-                            className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                            className="w-1/2 px-2 py-1 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded text-xs"
+                            placeholder="H"
                         />
                     </div>
-                </div>
+                 </div>
             </div>
 
-            <button
-                onClick={onGenerate}
-                disabled={isLoading || !topic}
-                className="w-full bg-[var(--text-accent)] text-[var(--text-light)] font-bold py-2 px-4 rounded-md hover:bg-[var(--bg-panel-header-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-            >
-                {isLoading && <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
-                {isLoading ? 'Generating...' : 'Generate with AI'}
-            </button>
-
-            <div className="mt-6 flex-grow flex flex-col">
-                <label htmlFor="jsonInput" className="block text-sm font-medium mb-2">Generated JSON (Editable)</label>
-                <textarea
-                    id="jsonInput"
-                    spellCheck="false"
-                    value={jsonText}
-                    onChange={(e) => setJsonText(e.target.value)}
-                    className="w-full flex-grow bg-[var(--bg)] border border-[var(--border-med)] rounded-md p-2 font-mono text-sm resize-y min-h-[150px]"
-                />
-            </div>
-             <button
-                onClick={onRender}
-                className="w-full mt-2 bg-[var(--bg-panel-alt)] text-[var(--text)] border border-[var(--border-med)] font-semibold py-2 px-4 rounded-md hover:bg-[var(--border-light)] transition-colors"
-            >
-                Render from JSON
-            </button>
-
-            <button
-                onClick={onAddNode}
-                className="w-full mt-2 bg-[var(--bg-panel)] text-[var(--text-accent)] border border-[var(--text-accent)] font-semibold py-2 px-4 rounded-md hover:bg-[var(--bg-alt)] transition-colors flex items-center justify-center"
-            >
-                + Add New Node
-            </button>
-
-            <div className="grid grid-cols-1 gap-2 mt-4">
-                 <button onClick={onDownloadSVG} className="bg-[var(--bg-panel-alt)] text-[var(--text)] border border-[var(--border-med)] text-sm font-semibold py-2 px-4 rounded-md hover:bg-[var(--border-light)] transition-colors">Download SVG</button>
-            </div>
-             <div className="flex justify-center items-center mt-4">
-                <label htmlFor="darkModeToggle" className="text-sm text-[var(--text-muted)] mr-2">Dark Mode</label>
-                <input type="checkbox" id="darkModeToggle" checked={isDarkMode} onChange={(e) => setDarkMode(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+            <div className="mt-auto pt-4">
+                 <details className="text-xs text-[var(--text-muted)]">
+                    <summary className="cursor-pointer hover:text-[var(--text-accent)] mb-2 list-none font-bold">Edit JSON Data</summary>
+                    <textarea
+                        spellCheck="false"
+                        value={jsonText}
+                        onChange={(e) => setJsonText(e.target.value)}
+                        className="w-full bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-md p-2 font-mono text-xs resize-y min-h-[100px]"
+                    />
+                     <button
+                        onClick={onRender}
+                        className="w-full mt-2 bg-[var(--bg-panel-alt)] text-[var(--text)] border border-[var(--border-med)] font-semibold py-1 px-2 rounded-md hover:bg-[var(--border-light)] transition-colors text-xs"
+                    >
+                        Update from JSON
+                    </button>
+                </details>
             </div>
 
         </div>

@@ -1,7 +1,7 @@
 
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { FLOWCHART_SCHEMA } from '../constants';
-import { FlowchartData, DepthLevel, DiagramType } from '../types';
+import { FlowchartData, DepthLevel, DiagramType, Node } from '../types';
 
 const API_KEY = process.env.API_KEY;
 if (!API_KEY) {
@@ -10,7 +10,7 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-export const generateFlowchartJson = async (topic: string, depth: DepthLevel, type: DiagramType): Promise<FlowchartData> => {
+export const generateFlowchartJson = async (topic: string, depth: DepthLevel, type: DiagramType, nodeCount?: number): Promise<FlowchartData> => {
   const systemInstruction = `You are an expert at creating diagram data structures in JSON format. You will be given a topic, a diagram type (Flowchart or Mind Map), and a desired level of detail. Your response must strictly adhere to the provided JSON schema. Do not add any explanatory text or markdown formatting around the JSON output.`;
 
   let layoutInstructions = '';
@@ -27,19 +27,21 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
       - Connectors should flow downwards.
       `;
   } else if (type === DiagramType.MINDMAP) {
+      const targetNodes = nodeCount || 15;
       layoutInstructions = `
       **Layout Strategy: MIND MAP**
       - **Canvas Size**: STRICTLY set canvas width to 1700 and height to 1700.
       - **Structure**: Central Root Node -> Branches (Level 1) -> Sub-branches (Level 2).
-      - **Positions**: Place the **Main Topic** node strictly in the center of the canvas (x: 850, y: 850) - centering the node based on its width.
+      - **Node Count**: You MUST generate approximately **${targetNodes} nodes** in total. Distribute them logically across branches.
+      - **Positions**: Place the **Main Topic** node strictly in the center of the canvas (x: 850, y: 850).
       - **Radial Layout**: Radiate Level 1 nodes outwards in a circle around the center. Place Level 2 nodes further out from their parents.
-      - **Sizing (CRITICAL)**: 
+      - **Sizing**: 
           - **Width**: Approx formula: (title_chars * 11) + 80. Min: 200, Max: 400.
-          - **Height**: Start with 100. The frontend will auto-resize, but provide a reasonable base.
+          - **Height**: Start with 100.
       - **Visuals**: Nodes will be rendered as rounded rectangles.
       - **Connectors**: Use straight lines connecting Parent to Child. Do NOT use arrows.
       - **Cleanliness**: Do NOT use 'supportingPanel' or 'sideBoxes'.
-      - **Spacing**: Spread nodes out significantly to fill the 1700x1700 canvas.
+      - **Spacing**: Spread nodes out significantly to fill the 1700x1700 canvas. Avoid overlapping.
       `;
   }
 
@@ -53,7 +55,7 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
 
     **General Constraints:**
     - For 'Simple', use fewer nodes.
-    - For 'Detailed' or 'Expert', increase the number of nodes and complexity espeically in mind map about 6-9 .
+    - For 'Detailed' or 'Expert', increase the complexity.
   `;
 
   try {
@@ -91,42 +93,14 @@ export const generateFlowchartJson = async (topic: string, depth: DepthLevel, ty
   }
 };
 
-export const generateNodeImage = async (nodeTitle: string, nodeDescription: string): Promise<string> => {
-  const prompt = `Create a clean,   good illustration for a flowchart node titled "${nodeTitle}". Context: ${nodeDescription}. The design should be colorful, suitable for a white background circular icon container. Do not include text in the image.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { text: prompt },
-        ],
-      },
-      config: {
-          responseModalities: [Modality.IMAGE],
-      },
-    });
-
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    if (part && part.inlineData && part.inlineData.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
-    throw new Error("No image data returned from the API.");
-
-  } catch (error) {
-    console.error("Error generating node image:", error);
-    throw new Error("Failed to generate image. Please try again.");
-  }
-};
-
 export const generateEnhancedDescription = async (nodeTitle: string, currentDescription: string, topic: string): Promise<string> => {
   const prompt = `
     I have a node in a diagram about "${topic}".
     Node Title: "${nodeTitle}"
     Current Description: "${currentDescription}"
     
-    Please expand on the description for this node to provide more depth and detail, in simple text, in  few sentences, and not extra deatil  like introduction , onely the relevent part ("Generate Further").
-     Maintain the tone of the original diagram.
+    Please expand on the description for this node to provide more depth and detail, in simple text, in few sentences.
+    Maintain the tone of the original diagram.
   `;
 
   try {
@@ -141,3 +115,41 @@ export const generateEnhancedDescription = async (nodeTitle: string, currentDesc
     throw new Error("Failed to generate expanded description.");
   }
 };
+
+export const generateSubnodes = async (parentNode: Node, topic: string): Promise<{ title: string; description: string; icon: string }[]> => {
+    const prompt = `
+      I have a Mind Map/Flowchart about "${topic}".
+      I want to expand on the specific node: "${parentNode.title}" (Description: ${parentNode.description}).
+      
+      Generate 3 to 5 new sub-concepts (child nodes) that stem from this node.
+      Return them as a JSON array of objects.
+    `;
+
+    const schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                icon: { type: Type.STRING, description: "One of: droplet, spring, spark, exhaust, gear, pump, bolt, idea, check, warning, search, or document" }
+            },
+            required: ['title', 'description', 'icon']
+        }
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: schema
+            }
+        });
+        return JSON.parse(response.text.trim());
+    } catch (error) {
+        console.error("Error generating subnodes:", error);
+        throw new Error("Failed to generate subnodes.");
+    }
+}

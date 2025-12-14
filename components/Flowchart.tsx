@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from 'react';
 import { FlowchartData, Position, Node as NodeType, Connector as ConnectorType, SideBox as SideBoxType, SupportingPanel as SupportingPanelType, DiagramType, Size } from '../types';
 
 // --- Draggable Hook ---
@@ -111,6 +111,19 @@ const getIcon = (iconName?: string): string => {
   }
 };
 
+const MIND_MAP_PALETTE = [
+    '#ef4444', // Red
+    '#f97316', // Orange
+    '#f59e0b', // Amber
+    '#84cc16', // Lime
+    '#10b981', // Emerald
+    '#06b6d4', // Cyan
+    '#3b82f6', // Blue
+    '#8b5cf6', // Violet
+    '#d946ef', // Fuchsia
+    '#f43f5e', // Rose
+];
+
 interface DraggableSupportingPanelProps {
     panel: SupportingPanelType;
     nodes: NodeType[];
@@ -134,13 +147,13 @@ const DraggableSupportingPanel: React.FC<DraggableSupportingPanelProps> = ({ pan
     
     useLayoutEffect(() => {
         const newLayouts: {y: number, height: number}[] = [];
-        let yOffset = position.y + 68;
+        let yOffset = position.y + 56; // Header height 48 + spacing 8
         
         textRefs.current.forEach((el) => {
             const textHeight = el?.scrollHeight ?? 0;
-            const itemHeight = Math.max(62, textHeight + 20);
+            const itemHeight = Math.max(50, textHeight + 20);
             newLayouts.push({ y: yOffset, height: itemHeight });
-            yOffset += itemHeight + 18;
+            yOffset += itemHeight + 12;
         });
         
         if (JSON.stringify(newLayouts) !== JSON.stringify(itemLayouts)) {
@@ -155,13 +168,31 @@ const DraggableSupportingPanel: React.FC<DraggableSupportingPanelProps> = ({ pan
 
     return (
         <g>
-            <rect x={px} y={py} width={pw} height={panelHeight} rx={12} fill="url(#grad-side-panel)" stroke="var(--border-dark)" strokeWidth="1.2" style={{ filter: 'url(#ds-lg)' }} />
-            <rect x={px} y={py} width={pw} height={56} rx={12} ry={12} fill="url(#grad-header)" {...dragHandlers} className="svg-draggable" />
-            <rect x={px} y={py + 44} width={pw} height={12} fill="url(#grad-header)" />
-            <text x={px + 18} y={py + 36} fontSize={18} fontWeight="700" fill="var(--text-header)" style={{ pointerEvents: 'none' }}>{panel.title}</text>
+            {/* Main Background Panel */}
+            <rect 
+                x={px} y={py} 
+                width={pw} height={panelHeight} 
+                rx={12} 
+                fill="var(--bg-panel)" 
+                stroke="var(--border-med)" 
+                strokeWidth="1" 
+                style={{ filter: 'url(#ds-lg)' }} 
+            />
             
+            {/* Header Area */}
+            <path 
+                d={`M ${px} ${py+12} a 12 12 0 0 1 12 -12 h ${pw-24} a 12 12 0 0 1 12 12 v 36 h -${pw} z`} 
+                fill="var(--bg-panel-header)" 
+                {...dragHandlers} 
+                className="svg-draggable" 
+            />
+            <text x={px + 16} y={py + 30} fontSize={15} fontWeight="700" fill="var(--text-header)" style={{ pointerEvents: 'none', letterSpacing: '0.05em' }}>
+                {panel.title.toUpperCase()}
+            </text>
+            
+            {/* Items */}
             {panel.items.map((item, idx) => {
-                const layout = itemLayouts[idx] || { y: py + 68 + idx * 80, height: 62 };
+                const layout = itemLayouts[idx] || { y: py + 56 + idx * 70, height: 60 };
                 const { y: iy, height: itemHeight } = layout;
                 const node = item.connectsToNode ? nodes.find(n => n.id === item.connectsToNode) : null;
                 const toX = node ? node.position.x + node.size.w / 2 : 0;
@@ -173,15 +204,24 @@ const DraggableSupportingPanel: React.FC<DraggableSupportingPanelProps> = ({ pan
                 return (
                     <g key={item.id}>
                          {node && (
-                            <path d={dPath} stroke={item.color || '#64748b'} strokeWidth="2" strokeDasharray="4 4" fill="none" markerEnd="url(#arrowhead)" opacity="0.6" />
+                            <path d={dPath} stroke={item.color || '#64748b'} strokeWidth="1.5" strokeDasharray="4 4" fill="none" markerEnd="url(#arrowhead)" opacity="0.5" />
                         )}
-                        <rect x={px + 16} y={iy} width={pw - 32} height={itemHeight} rx={8} fill="var(--bg-panel)" stroke="var(--border-light)" />
-                        <circle cx={px + 40} cy={iy + itemHeight/2} r={16} fill={`${item.color || '#3b82f6'}20`} />
-                         <text x={px + 40} y={iy + itemHeight/2 + 5} textAnchor="middle" fontSize={16}>{getIcon(item.icon)}</text>
-                        <foreignObject x={px + 68} y={iy + 10} width={pw - 90} height={itemHeight - 20}>
+                        
+                        {/* Item Container */}
+                        <rect x={px + 12} y={iy} width={pw - 24} height={itemHeight} rx={8} fill="var(--bg-alt)" stroke="var(--border-light)" />
+                        
+                        {/* Color Accent Pill */}
+                        <rect x={px + 18} y={iy + 10} width={4} height={itemHeight - 20} rx={2} fill={item.color || '#3b82f6'} />
+
+                        {/* Icon */}
+                        <circle cx={px + 44} cy={iy + itemHeight/2} r={14} fill="var(--bg-panel)" stroke="var(--border-light)" />
+                        <text x={px + 44} y={iy + itemHeight/2 + 5} textAnchor="middle" fontSize={14}>{getIcon(item.icon)}</text>
+                        
+                        {/* Text Content */}
+                        <foreignObject x={px + 70} y={iy + 8} width={pw - 88} height={itemHeight - 16}>
                             <div ref={el => { textRefs.current[idx] = el }} style={{ fontFamily, fontSize: '12px', color: 'var(--text)' }}>
-                                <strong style={{ display: 'block', marginBottom: '2px' }}>{item.title}</strong>
-                                <span style={{ color: 'var(--text-muted)' }}>{item.description}</span>
+                                <strong style={{ display: 'block', marginBottom: '1px' }}>{item.title}</strong>
+                                <span style={{ color: 'var(--text-muted)', lineHeight: '1.3' }}>{item.description}</span>
                             </div>
                         </foreignObject>
                     </g>
@@ -200,9 +240,10 @@ interface DraggableNodeProps {
     onDoubleClick: (node: NodeType) => void;
     zoom: number;
     diagramType: DiagramType;
+    accentColor?: string;
 }
 
-const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, onSizeChange, onDoubleClick, zoom, diagramType }) => {
+const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, onSizeChange, onDoubleClick, zoom, diagramType, accentColor }) => {
     const handleDrag = useCallback((newPos: Position) => {
         onPositionChange(node.id, newPos, false);
     }, [node.id, onPositionChange]);
@@ -229,6 +270,9 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, o
     const { w, h } = node.size;
     const iconY = diagramType === DiagramType.MINDMAP ? 43 : h / 2;
 
+    const strokeColor = accentColor || (node.type === 'output' ? 'var(--text-accent)' : 'var(--border-med)');
+    const strokeWidth = accentColor ? 2 : (node.type === 'output' ? 2 : 1);
+
     return (
         <g transform={`translate(${x}, ${y})`} className="svg-draggable" onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(node); }}>
              <defs>
@@ -242,20 +286,15 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, o
                 height={h} 
                 rx={diagramType === DiagramType.MINDMAP ? 20 : 8} 
                 fill={`url(#grad-node-${node.type === 'output' ? 'output' : 'main'})`} 
-                stroke={node.type === 'output' ? 'var(--text-accent)' : 'var(--border-med)'} 
-                strokeWidth={node.type === 'output' ? 2 : 1}
+                stroke={strokeColor}
+                strokeWidth={strokeWidth}
                 style={{ filter: 'url(#ds-sm)' }}
                 {...dragHandlers}
             />
             
             {/* Icon Container */}
-            <circle cx={40} cy={iconY} r={24} fill="url(#grad-icon)" stroke="var(--border-light)" />
-            
-            {node.imageUrl ? (
-                <image x={16} y={iconY - 24} width={48} height={48} href={node.imageUrl} clipPath={`circle(24px at 24px 24px)`} preserveAspectRatio="xMidYMid slice" pointerEvents="none"/>
-            ) : (
-                <text x={40} y={iconY + 8} fontSize="24" textAnchor="middle" pointerEvents="none">{getIcon(node.icon)}</text>
-            )}
+            <circle cx={40} cy={iconY} r={24} fill="url(#grad-icon)" stroke={accentColor || "var(--border-light)"} strokeWidth={accentColor ? 1.5 : 1} />
+            <text x={40} y={iconY + 8} fontSize="24" textAnchor="middle" pointerEvents="none">{getIcon(node.icon)}</text>
 
             {/* Text Content */}
             <foreignObject x={80} y={10} width={w - 90} height={h - 20} style={{ pointerEvents: 'none' }}>
@@ -297,6 +336,74 @@ const Flowchart: React.FC<FlowchartProps> = ({
     data, svgRef, onPanelPositionChange, onNodePositionChange, onNodeSizeChange, onNodeDoubleClick, onCanvasResize, zoom, onZoomChange, pan, onPanChange, diagramType
 }) => {
   if (!data) return <div className="w-full h-full flex items-center justify-center text-[var(--text-muted)]">No data to render</div>;
+
+  // Compute Mind Map Colors
+  const nodeColorMap = useMemo(() => {
+    if (diagramType !== DiagramType.MINDMAP) return {};
+    
+    // 1. Find Root (closest to center of canvas)
+    const cx = data.canvas.width / 2;
+    const cy = data.canvas.height / 2;
+    let rootNode = data.nodes[0];
+    let minDist = Infinity;
+
+    data.nodes.forEach(n => {
+        const d = Math.hypot((n.position.x + n.size.w/2) - cx, (n.position.y + n.size.h/2) - cy);
+        if (d < minDist) {
+            minDist = d;
+            rootNode = n;
+        }
+    });
+
+    const colors: Record<string, string> = {};
+    const processed = new Set<string>();
+    processed.add(rootNode.id);
+
+    // 2. Find Level 1 nodes (connected to Root)
+    const level1Nodes: NodeType[] = [];
+    data.connectors.forEach(c => {
+        if (c.from === rootNode.id) {
+            const target = data.nodes.find(n => n.id === c.to);
+            if (target) level1Nodes.push(target);
+        } else if (c.to === rootNode.id) {
+            const source = data.nodes.find(n => n.id === c.from);
+            if (source) level1Nodes.push(source);
+        }
+    });
+
+    // 3. Assign Palette Colors to Level 1
+    level1Nodes.forEach((node, idx) => {
+        const color = MIND_MAP_PALETTE[idx % MIND_MAP_PALETTE.length];
+        colors[node.id] = color;
+        processed.add(node.id);
+    });
+
+    // 4. Propagate colors to children (BFS/Queue)
+    const queue = [...level1Nodes];
+    while (queue.length > 0) {
+        const parent = queue.shift()!;
+        const parentColor = colors[parent.id];
+        
+        // Find nodes connected to parent that aren't processed
+        data.connectors.forEach(c => {
+            let childId: string | null = null;
+            if (c.from === parent.id && !processed.has(c.to)) childId = c.to;
+            if (c.to === parent.id && !processed.has(c.from)) childId = c.from;
+            
+            if (childId) {
+                const child = data.nodes.find(n => n.id === childId);
+                if (child) {
+                    colors[childId] = parentColor;
+                    processed.add(childId);
+                    queue.push(child);
+                }
+            }
+        });
+    }
+
+    return colors;
+
+  }, [data.nodes, data.connectors, diagramType, data.canvas]);
 
   // Canvas Draggable (Panning)
   const { position: canvasPan, dragHandlers: canvasDrag } = useDraggable(pan, (p) => onPanChange(p), 1, (p) => onPanChange(p));
@@ -560,16 +667,26 @@ const Flowchart: React.FC<FlowchartProps> = ({
                     }
                 }
 
+                // Determine Connector Color
+                let stroke = "var(--border-accent)";
+                if (diagramType === DiagramType.MINDMAP) {
+                    // Try to use the target's color, if not, use source's color
+                    if (nodeColorMap[conn.to]) stroke = nodeColorMap[conn.to];
+                    else if (nodeColorMap[conn.from]) stroke = nodeColorMap[conn.from];
+                }
+
                 return (
                     <path 
                         key={conn.id} 
                         d={d} 
-                        stroke="var(--border-accent)" 
-                        strokeWidth={conn.style?.strokeWidth || 2} 
+                        stroke={stroke} 
+                        strokeWidth={conn.style?.strokeWidth || (diagramType === DiagramType.MINDMAP ? 3 : 2)} 
                         strokeDasharray={conn.style?.strokeDasharray}
+                        strokeLinecap="round"
                         fill="none" 
                         markerEnd={diagramType === DiagramType.MINDMAP ? "" : "url(#arrowhead)"} 
                         vectorEffect="non-scaling-stroke"
+                        opacity={diagramType === DiagramType.MINDMAP ? 0.7 : 1}
                     />
                 );
             })}
@@ -584,6 +701,7 @@ const Flowchart: React.FC<FlowchartProps> = ({
                     onDoubleClick={onNodeDoubleClick}
                     zoom={zoom}
                     diagramType={diagramType}
+                    accentColor={nodeColorMap[node.id]}
                 />
             ))}
 

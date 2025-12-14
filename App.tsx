@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Controls from './components/Controls';
 import Flowchart from './components/Flowchart';
-import { generateFlowchartJson, generateNodeImage, generateEnhancedDescription } from './services/geminiService';
+import { generateFlowchartJson, generateEnhancedDescription, generateSubnodes } from './services/geminiService';
 import { FlowchartData, DepthLevel, Position, Node as NodeType, DiagramType, Size } from './types';
 import { DEFAULT_FLOWCHART_DATA, THEMES } from './constants';
 
@@ -23,9 +23,10 @@ const App: React.FC = () => {
   const [pan, setPan] = useState<Position>({ x: 0, y: 0 });
   const [theme, setTheme] = useState<string>('default');
   const [editingNode, setEditingNode] = useState<NodeType | null>(null);
-  const [isImageGenerating, setIsImageGenerating] = useState(false);
   const [isDescriptionGenerating, setIsDescriptionGenerating] = useState(false);
+  const [isSubnodesGenerating, setIsSubnodesGenerating] = useState(false);
   const [backgroundColor, setBackgroundColor] = useState('#f8fafc');
+  const [nodeCount, setNodeCount] = useState<number>(15);
 
   // Undo/Redo History State
   const [history, setHistory] = useState<FlowchartData[]>([DEFAULT_FLOWCHART_DATA]);
@@ -75,10 +76,13 @@ const App: React.FC = () => {
         e.preventDefault();
         handleRedo();
       }
+      if (e.key === 'Escape' && editingNode) {
+          setEditingNode(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, editingNode]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -99,7 +103,7 @@ const App: React.FC = () => {
     setError(null);
     try {
       // 1. Generate the Structure
-      const data = await generateFlowchartJson(topic, depth, diagramType);
+      const data = await generateFlowchartJson(topic, depth, diagramType, nodeCount);
       
       setFlowchartData(data);
       setJsonText(JSON.stringify(data, null, 2));
@@ -108,39 +112,6 @@ const App: React.FC = () => {
       setZoom(1);
       setPan({ x: 0, y: 0 });
       setIsLoading(false); 
-
-      // 2. Auto-Generate Images for Nodes in Background
-      const imagePromises = data.nodes.map(async (node) => {
-          try {
-              const url = await generateNodeImage(node.title, node.description);
-              
-              setFlowchartData(prev => {
-                 if (!prev) return null;
-                 return {
-                     ...prev,
-                     nodes: prev.nodes.map(n => n.id === node.id ? { ...n, imageUrl: url } : n)
-                 };
-              });
-              
-              return { id: node.id, url };
-          } catch (e) {
-              console.warn(`Failed to generate image for node ${node.id}`, e);
-              return { id: node.id, url: null };
-          }
-      });
-
-      const results = await Promise.all(imagePromises);
-
-      const finalData = {
-          ...data,
-          nodes: data.nodes.map(n => {
-              const res = results.find(r => r.id === n.id);
-              return res && res.url ? { ...n, imageUrl: res.url } : n;
-          })
-      };
-
-      setHistory([finalData]);
-      setJsonText(JSON.stringify(finalData, null, 2));
 
     } catch (err) {
       setIsLoading(false);
@@ -305,7 +276,6 @@ const App: React.FC = () => {
     let newNodes = [...flowchartData.nodes];
 
     // Check if dragging Root Node in Mind Map
-    // We identify the root as a node that is not a 'to' target in any connector (Assuming connectors flow from Root outwards)
     const isMindMap = flowchartData.diagramType === DiagramType.MINDMAP || diagramType === DiagramType.MINDMAP;
     const isRootNode = isMindMap && !flowchartData.connectors.some(c => c.to === nodeId);
 
@@ -398,20 +368,105 @@ const App: React.FC = () => {
       }
   };
 
-  const handleGenerateNodeImage = async () => {
-      if(!editingNode || !flowchartData) return;
-      setIsImageGenerating(true);
+  const handleGenerateSubnodes = async () => {
+      if (!editingNode || !flowchartData) return;
+      setIsSubnodesGenerating(true);
+      
       try {
-          const imageUrl = await generateNodeImage(editingNode.title, editingNode.description);
-          const newNodes = flowchartData.nodes.map(n => n.id === editingNode.id ? { ...n, imageUrl: imageUrl } : n);
-          const newData = { ...flowchartData, nodes: newNodes };
+          const newSubnodes = await generateSubnodes(editingNode, topic);
+          
+          if (newSubnodes.length === 0) return;
+
+          const isMindMap = flowchartData.diagramType === DiagramType.MINDMAP;
+          
+          // Calculate positions
+          // Flowchart: Place below. Mindmap: Place radially outwards
+          const parentCenter = { 
+              x: editingNode.position.x + editingNode.size.w/2, 
+              y: editingNode.position.y + editingNode.size.h/2 
+          };
+
+          const newNodes: NodeType[] = [];
+          const newConnectors: any[] = [];
+          
+          const radius = 350;
+          const startAngle = Math.random() * Math.PI * 2; // Random rotation start if no parent
+
+          // Simple angle determination
+          // If parent has a parent, continue that vector. If root, radiate.
+          const incomingConnector = flowchartData.connectors.find(c => c.to === editingNode.id);
+          let baseAngle = Math.PI / 2; // Default down
+          
+          if (isMindMap) {
+               if (incomingConnector) {
+                  const parentNode = flowchartData.nodes.find(n => n.id === incomingConnector.from);
+                  if (parentNode) {
+                      const pCenter = { x: parentNode.position.x + parentNode.size.w/2, y: parentNode.position.y + parentNode.size.h/2 };
+                      baseAngle = Math.atan2(parentCenter.y - pCenter.y, parentCenter.x - pCenter.x);
+                  }
+               } else {
+                   // Root
+                   baseAngle = -Math.PI / 2;
+               }
+          }
+
+          const angleSpread = isMindMap ? (incomingConnector ? Math.PI / 3 : Math.PI * 2) : 0; // If root, full circle. If child, narrow cone.
+          
+          newSubnodes.forEach((sn, idx) => {
+              const id = `n-${Date.now()}-${idx}`;
+              
+              let nx, ny;
+
+              if (isMindMap) {
+                  let angle;
+                  if (!incomingConnector) {
+                      // Root: distribute evenly
+                      angle = (idx / newSubnodes.length) * Math.PI * 2;
+                  } else {
+                      // Child: Cone
+                      const offset = (idx - (newSubnodes.length - 1) / 2) * (Math.PI / 8); 
+                      angle = baseAngle + offset;
+                  }
+                  
+                  nx = parentCenter.x + Math.cos(angle) * radius - 150; // Centering offset assuming width 300
+                  ny = parentCenter.y + Math.sin(angle) * radius - 40;
+              } else {
+                  // Flowchart: Vertical stack below
+                  nx = editingNode.position.x + (idx - (newSubnodes.length-1)/2) * 320; 
+                  ny = editingNode.position.y + 200;
+              }
+
+              newNodes.push({
+                  id,
+                  type: 'main',
+                  title: sn.title,
+                  description: sn.description,
+                  icon: sn.icon,
+                  position: { x: nx, y: ny },
+                  size: { w: isMindMap ? 300 : 300, h: 100 }
+              });
+
+              newConnectors.push({
+                  id: `c-${Date.now()}-${idx}`,
+                  from: editingNode.id,
+                  to: id,
+                  type: 'flow'
+              });
+          });
+
+          const newData = {
+              ...flowchartData,
+              nodes: [...flowchartData.nodes, ...newNodes],
+              connectors: [...flowchartData.connectors, ...newConnectors]
+          };
+          
           pushToHistory(newData);
-          setEditingNode({ ...editingNode, imageUrl: imageUrl });
-      } catch (err) {
-          console.error(err);
-          alert("Failed to generate image. Please try again.");
+
+      } catch (e) {
+          console.error(e);
+          alert("Failed to generate subnodes. Please try again.");
       } finally {
-          setIsImageGenerating(false);
+          setIsSubnodesGenerating(false);
       }
   };
 
@@ -463,107 +518,100 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {editingNode && (
-          <div className="fixed inset-0 z-[100] bg-black bg-opacity-50 flex items-center justify-center p-4">
-              <div className="bg-[var(--bg-panel)] p-6 rounded-lg shadow-xl w-full max-w-md border border-[var(--border-light)]">
-                  <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-bold text-[var(--text)]">Edit Node</h3>
-                      <button onClick={handleDeleteNode} className="text-red-500 hover:text-red-700 text-sm font-medium">
-                          Delete Node
-                      </button>
-                  </div>
-                  <div className="mb-4">
-                      <label className="block text-sm font-medium mb-1 text-[var(--text-muted)]">Title</label>
-                      <input 
-                        autoFocus
-                        type="text" 
-                        defaultValue={editingNode.title} 
-                        id="edit-title"
-                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)] text-[var(--text)]"
-                       />
-                  </div>
-                  <div className="mb-4">
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium text-[var(--text-muted)]">Description</label>
-                        <button 
-                            onClick={handleGenerateDescription}
-                            disabled={isDescriptionGenerating}
-                            className="text-xs font-medium text-[var(--text-accent)] hover:text-[var(--text)] flex items-center gap-1 disabled:opacity-50 transition-colors"
-                            title="Use AI to expand the description"
+      {/* Floating Node Editor Panel (Right Side) */}
+      <div className={`fixed inset-y-0 right-0 z-[100] w-96 bg-[var(--bg-panel)]/95 backdrop-blur-xl border-l border-[var(--border-light)] shadow-2xl transform transition-transform duration-300 ease-in-out ${editingNode ? 'translate-x-0' : 'translate-x-full'}`}>
+          {editingNode && (
+            <div className="h-full flex flex-col p-6 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-black uppercase text-[var(--text)] tracking-tight">Edit Node</h3>
+                    <button onClick={() => setEditingNode(null)} className="p-2 rounded-full hover:bg-[var(--bg-alt)] transition-colors">
+                        <svg className="w-6 h-6 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div className="space-y-6 flex-grow">
+                    <div>
+                        <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Title</label>
+                        <input 
+                            autoFocus
+                            type="text" 
+                            defaultValue={editingNode.title} 
+                            id="edit-title"
+                            className="w-full px-4 py-3 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)] text-[var(--text)] text-lg font-bold"
+                        />
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Description</label>
+                            <button 
+                                onClick={handleGenerateDescription}
+                                disabled={isDescriptionGenerating}
+                                className="text-xs font-bold text-[var(--text-accent)] hover:underline disabled:opacity-50 flex items-center gap-1"
+                            >
+                                {isDescriptionGenerating ? 'Expanding...' : '✨ Enhance w/ AI'}
+                            </button>
+                        </div>
+                        <textarea 
+                            defaultValue={editingNode.description} 
+                            id="edit-desc"
+                            className="w-full px-4 py-3 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)] text-[var(--text)] h-32 resize-none"
+                        />
+                    </div>
+
+                    <div className="p-4 bg-[var(--bg-alt)] rounded-xl border border-[var(--border-med)]">
+                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">AI Actions</h4>
+                        <button
+                            onClick={handleGenerateSubnodes}
+                            disabled={isSubnodesGenerating}
+                            className="w-full py-2 px-4 bg-white dark:bg-slate-700 border border-[var(--border-med)] rounded-lg shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 text-sm font-semibold text-[var(--text-accent)]"
                         >
-                            {isDescriptionGenerating ? (
-                                <span className="flex items-center gap-1">
-                                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    Thinking...
-                                </span>
+                            {isSubnodesGenerating ? (
+                                <>
+                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    Generating...
+                                </>
                             ) : (
                                 <>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
-                                    </svg>
-                                    Generate Further
+                                    <span>🌱</span> Generate Sub-nodes
                                 </>
                             )}
                         </button>
-                      </div>
-                      <textarea 
-                        defaultValue={editingNode.description} 
-                        id="edit-desc"
-                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border-med)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)] text-[var(--text)] h-24 resize-none"
-                      />
-                  </div>
-                  
-                   <div className="mb-6 flex items-center justify-between border-t border-[var(--border-light)] pt-4">
-                      <div className="text-sm">
-                          <span className="text-[var(--text)] font-medium">Node Icon</span>
-                          <p className="text-[var(--text-muted)] text-xs">Regenerate the AI icon for this node.</p>
-                      </div>
-                      <button
-                        onClick={handleGenerateNodeImage}
-                        disabled={isImageGenerating}
-                        className="bg-[var(--bg-alt)] hover:bg-[var(--bg-panel-header)] hover:text-white text-[var(--text-accent)] border border-[var(--border-accent)] px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-2"
-                      >
-                          {isImageGenerating ? (
-                              <>Generating...</>
-                          ) : (
-                              <>✨ Generate</>
-                          )}
-                      </button>
-                  </div>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">Creates 3-5 related child nodes.</p>
+                    </div>
 
-                  <div className="flex justify-end gap-3">
-                      <button 
-                        onClick={() => setEditingNode(null)}
-                        className="px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-alt)] rounded-md transition-colors"
-                      >
-                          Cancel
-                      </button>
-                      <button 
+                </div>
+
+                <div className="mt-6 space-y-3">
+                     <button 
                         onClick={() => {
                             const t = (document.getElementById('edit-title') as HTMLInputElement).value;
                             const d = (document.getElementById('edit-desc') as HTMLTextAreaElement).value;
                             handleNodeEditSave(t, d);
                         }}
-                        className="px-4 py-2 text-sm font-medium text-white bg-[var(--text-accent)] hover:bg-[var(--bg-panel-header-dark)] rounded-md transition-colors"
-                      >
-                          Save Changes
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
+                        className="w-full py-3 px-4 bg-[var(--text-accent)] text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all"
+                    >
+                        Save Changes
+                    </button>
+                    <button onClick={handleDeleteNode} className="w-full py-3 px-4 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 font-semibold rounded-xl transition-colors border border-transparent hover:border-red-200">
+                        Delete Node
+                    </button>
+                </div>
+            </div>
+          )}
+      </div>
 
       <button 
         onClick={() => setControlsVisible(v => !v)}
-        className="fixed top-1/2 -translate-y-1/2 z-30 bg-[var(--bg-panel)] hover:bg-[var(--bg-panel-alt)] border border-l-0 border-[var(--border-med)] rounded-r-lg px-1 py-4 transition-all duration-300 ease-in-out shadow-md"
-        style={{ left: isControlsVisible ? '420px' : '0px' }}
+        className="fixed top-6 z-30 bg-[var(--bg-panel)] hover:bg-[var(--bg-panel-alt)] border border-l-0 border-[var(--border-med)] rounded-r-lg px-2 py-3 transition-all duration-300 ease-in-out shadow-md"
+        style={{ left: isControlsVisible ? '400px' : '0px' }}
         aria-label={isControlsVisible ? 'Hide controls' : 'Show controls'}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform text-[var(--text)] ${isControlsVisible ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform text-[var(--text)] ${isControlsVisible ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
       </button>
       
       <div className={`
-        absolute top-0 left-0 h-full w-full max-w-[420px] z-20 
+        absolute top-0 left-0 h-full w-[400px] z-20 
         transform transition-transform duration-300 ease-in-out
         ${isControlsVisible ? 'translate-x-0' : '-translate-x-full'}
       `}>
@@ -596,36 +644,38 @@ const App: React.FC = () => {
             setTheme={setTheme}
             backgroundColor={backgroundColor}
             setBackgroundColor={setBackgroundColor}
+            nodeCount={nodeCount}
+            setNodeCount={setNodeCount}
           />
       </div>
       
-      <div className={`h-full w-full transition-all duration-300 ease-in-out ${isControlsVisible ? 'md:ml-[420px]' : 'ml-0'}`}>
+      <div className={`h-full w-full transition-all duration-300 ease-in-out ${isControlsVisible ? 'md:ml-[400px]' : 'ml-0'}`}>
           <main className="relative bg-transparent border-t md:border-t-0 md:border-l border-[var(--border-light)] p-0 overflow-hidden h-full w-full">
             
             <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-                 <div className="bg-[var(--bg-panel)] border border-[var(--border-med)] rounded-lg shadow-sm p-1 flex flex-col items-center">
+                 <div className="bg-[var(--bg-panel)]/90 backdrop-blur-md border border-[var(--border-med)] rounded-xl shadow-lg p-1 flex flex-col items-center">
                     <div className="flex border-b border-[var(--border-med)] w-full justify-center pb-1 mb-1">
-                        <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded disabled:opacity-30" title="Undo (Ctrl+Z)">
+                        <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded-lg disabled:opacity-30" title="Undo (Ctrl+Z)">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
                         </button>
-                        <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded disabled:opacity-30" title="Redo (Ctrl+Y)">
+                        <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded-lg disabled:opacity-30" title="Redo (Ctrl+Y)">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
                         </button>
                     </div>
-                    <button onClick={() => setZoom(z => Math.min(z + 0.1, 3))} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded" title="Zoom In">
+                    <button onClick={() => setZoom(z => Math.min(z + 0.1, 3))} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded-lg" title="Zoom In">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
                     </button>
-                    <button onClick={() => setZoom(1)} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded text-xs font-bold" title="Reset Zoom">
+                    <button onClick={() => setZoom(1)} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded-lg text-xs font-bold" title="Reset Zoom">
                         {Math.round(zoom * 100)}%
                     </button>
-                    <button onClick={() => setZoom(z => Math.max(z - 0.1, 0.2))} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded" title="Zoom Out">
+                    <button onClick={() => setZoom(z => Math.max(z - 0.1, 0.2))} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-accent)] hover:bg-[var(--bg-alt)] rounded-lg" title="Zoom Out">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
                     </button>
                  </div>
 
                  <button
                     onClick={handleDownloadPNG}
-                    className="bg-[var(--bg-panel)] text-[var(--text)] border border-[var(--border-med)] text-xs font-semibold py-2 px-3 rounded-md hover:bg-[var(--border-light)] transition-colors flex items-center justify-center gap-2 shadow-sm"
+                    className="bg-[var(--bg-panel)]/90 backdrop-blur-md text-[var(--text)] border border-[var(--border-med)] text-xs font-bold py-2 px-3 rounded-xl hover:bg-[var(--border-light)] transition-colors flex items-center justify-center gap-2 shadow-lg"
                     title="Download PNG"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
@@ -633,8 +683,8 @@ const App: React.FC = () => {
                 </button>
             </div>
 
-            <div className="absolute bottom-4 left-4 z-10 bg-[var(--bg-panel)] border border-[var(--border-med)] px-3 py-1 rounded-full text-xs text-[var(--text-muted)] shadow-sm opacity-80 pointer-events-none">
-                Drag borders/corner to resize canvas • Drag to pan • Ctrl+Z to Undo
+            <div className="absolute bottom-4 left-4 z-10 bg-[var(--bg-panel)]/80 backdrop-blur-sm border border-[var(--border-med)] px-4 py-2 rounded-full text-xs font-medium text-[var(--text-muted)] shadow-md pointer-events-none">
+                Double-click node to edit • Drag to pan • Ctrl+Z Undo
             </div>
 
             <Flowchart 

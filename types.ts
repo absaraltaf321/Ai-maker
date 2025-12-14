@@ -15,7 +15,6 @@ export interface Node {
   title: string;
   description: string;
   icon: string;
-  imageUrl?: string; // Generated AI image
   position: Position;
   size: Size;
   loop?: 'dotted';
