@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [isSubnodesGenerating, setIsSubnodesGenerating] = useState(false);
   const [backgroundColor, setBackgroundColor] = useState('#f8fafc');
   const [nodeCount, setNodeCount] = useState<number>(15);
+  const [subnodeAspect, setSubnodeAspect] = useState<string>('');
 
   // Undo/Redo History State
   const [history, setHistory] = useState<FlowchartData[]>([DEFAULT_FLOWCHART_DATA]);
@@ -373,7 +374,7 @@ const App: React.FC = () => {
       setIsSubnodesGenerating(true);
       
       try {
-          const newSubnodes = await generateSubnodes(editingNode, topic);
+          const newSubnodes = await generateSubnodes(editingNode, topic, subnodeAspect);
           
           if (newSubnodes.length === 0) return;
 
@@ -390,14 +391,12 @@ const App: React.FC = () => {
           const newConnectors: any[] = [];
           
           const radius = 350;
-          const startAngle = Math.random() * Math.PI * 2; // Random rotation start if no parent
 
-          // Simple angle determination
-          // If parent has a parent, continue that vector. If root, radiate.
-          const incomingConnector = flowchartData.connectors.find(c => c.to === editingNode.id);
-          let baseAngle = Math.PI / 2; // Default down
-          
+          // Determine Base Angle for "Auto" placement
+          let baseAngle = Math.PI / 2; // Default down (90 deg)
+
           if (isMindMap) {
+               const incomingConnector = flowchartData.connectors.find(c => c.to === editingNode.id);
                if (incomingConnector) {
                   const parentNode = flowchartData.nodes.find(n => n.id === incomingConnector.from);
                   if (parentNode) {
@@ -410,28 +409,37 @@ const App: React.FC = () => {
                }
           }
 
-          const angleSpread = isMindMap ? (incomingConnector ? Math.PI / 3 : Math.PI * 2) : 0; // If root, full circle. If child, narrow cone.
-          
+          // Angle Spread
+          // If auto mind map root: full circle. If child: narrow cone.
+          const isRoot = !flowchartData.connectors.some(c => c.to === editingNode.id);
+          const spread = (isMindMap && isRoot) ? Math.PI * 2 : Math.PI / 3;
+
           newSubnodes.forEach((sn, idx) => {
               const id = `n-${Date.now()}-${idx}`;
               
               let nx, ny;
 
+              // Angle for this specific child
+              let angle;
+              if (isMindMap && isRoot) {
+                  // Distribute evenly around circle
+                   angle = (idx / newSubnodes.length) * Math.PI * 2;
+              } else {
+                  // Cone distribution centered on baseAngle
+                  // If 1 node, offset is 0. If 3 nodes, -spread/2, 0, +spread/2
+                  const start = baseAngle - spread / 2;
+                  const step = newSubnodes.length > 1 ? spread / (newSubnodes.length - 1) : 0;
+                  angle = start + (step * idx);
+                  if (newSubnodes.length === 1) angle = baseAngle;
+              }
+
+              // Calculate Position
               if (isMindMap) {
-                  let angle;
-                  if (!incomingConnector) {
-                      // Root: distribute evenly
-                      angle = (idx / newSubnodes.length) * Math.PI * 2;
-                  } else {
-                      // Child: Cone
-                      const offset = (idx - (newSubnodes.length - 1) / 2) * (Math.PI / 8); 
-                      angle = baseAngle + offset;
-                  }
-                  
-                  nx = parentCenter.x + Math.cos(angle) * radius - 150; // Centering offset assuming width 300
+                  // Radial math for Mind Maps
+                  nx = parentCenter.x + Math.cos(angle) * radius - 150; 
                   ny = parentCenter.y + Math.sin(angle) * radius - 40;
               } else {
-                  // Flowchart: Vertical stack below
+                  // Standard Flowchart Auto (Vertical Stack)
                   nx = editingNode.position.x + (idx - (newSubnodes.length-1)/2) * 320; 
                   ny = editingNode.position.y + 200;
               }
@@ -443,7 +451,7 @@ const App: React.FC = () => {
                   description: sn.description,
                   icon: sn.icon,
                   position: { x: nx, y: ny },
-                  size: { w: isMindMap ? 300 : 300, h: 100 }
+                  size: { w: isMindMap ? 300 : 340, h: 100 } // Slightly wider for flowcharts
               });
 
               newConnectors.push({
@@ -467,8 +475,118 @@ const App: React.FC = () => {
           alert("Failed to generate subnodes. Please try again.");
       } finally {
           setIsSubnodesGenerating(false);
+          setSubnodeAspect(''); // Reset after generation
       }
   };
+
+  const handleAutoLayout = useCallback((type: 'radial' | 'tree' | 'horizontal') => {
+      if (!flowchartData) return;
+      
+      const nodes = [...flowchartData.nodes];
+      // Build Adjacency List
+      const adj: Record<string, string[]> = {};
+      flowchartData.connectors.forEach(c => {
+          if (!adj[c.from]) adj[c.from] = [];
+          adj[c.from].push(c.to);
+      });
+
+      // Find Root (Simplistic: first node or node with 0 incoming)
+      const incoming = new Set(flowchartData.connectors.map(c => c.to));
+      const roots = nodes.filter(n => !incoming.has(n.id));
+      const rootId = roots.length > 0 ? roots[0].id : nodes[0].id;
+      
+      const visited = new Set<string>();
+      const newPositions: Record<string, Position> = {};
+      
+      // BFS for Levels
+      const queue: { id: string, level: number, parentId: string | null }[] = [{ id: rootId, level: 0, parentId: null }];
+      const levels: Record<number, string[]> = {};
+
+      while (queue.length > 0) {
+          const { id, level } = queue.shift()!;
+          if (visited.has(id)) continue;
+          visited.add(id);
+
+          if (!levels[level]) levels[level] = [];
+          levels[level].push(id);
+
+          if (adj[id]) {
+              adj[id].forEach(childId => {
+                  queue.push({ id: childId, level: level + 1, parentId: id });
+              });
+          }
+      }
+      
+      const centerX = flowchartData.canvas.width / 2;
+      const centerY = flowchartData.canvas.height / 2;
+
+      // Apply Layouts
+      if (type === 'tree') {
+          // Standard Hierarchical Top-Down
+          const levelHeight = 200;
+          Object.keys(levels).forEach(lvlKey => {
+              const lvl = parseInt(lvlKey);
+              const nodesInLevel = levels[lvl];
+              const totalWidth = nodesInLevel.length * 360; 
+              const startX = centerX - totalWidth / 2;
+              
+              nodesInLevel.forEach((nid, idx) => {
+                  newPositions[nid] = {
+                      x: startX + idx * 360,
+                      y: 100 + lvl * levelHeight
+                  };
+              });
+          });
+      } else if (type === 'horizontal') {
+          // Left-to-Right
+          const levelWidth = 400;
+          Object.keys(levels).forEach(lvlKey => {
+              const lvl = parseInt(lvlKey);
+              const nodesInLevel = levels[lvl];
+              const totalHeight = nodesInLevel.length * 150; 
+              const startY = centerY - totalHeight / 2;
+              
+              nodesInLevel.forEach((nid, idx) => {
+                  newPositions[nid] = {
+                      x: 100 + lvl * levelWidth,
+                      y: startY + idx * 150
+                  };
+              });
+          });
+      } else if (type === 'radial') {
+          // Concentric Circles
+          newPositions[rootId] = { x: centerX - 150, y: centerY - 50 }; // Root Center
+          
+          Object.keys(levels).forEach(lvlKey => {
+              const lvl = parseInt(lvlKey);
+              if (lvl === 0) return;
+              
+              const radius = lvl * 350;
+              const nodesInLevel = levels[lvl];
+              const angleStep = (2 * Math.PI) / nodesInLevel.length;
+
+              nodesInLevel.forEach((nid, idx) => {
+                  const angle = idx * angleStep;
+                  newPositions[nid] = {
+                      x: centerX + Math.cos(angle) * radius - 150,
+                      y: centerY + Math.sin(angle) * radius - 50
+                  };
+              });
+          });
+      }
+
+      // Update Nodes
+      const updatedNodes = nodes.map(n => {
+          if (newPositions[n.id]) {
+              return { ...n, position: newPositions[n.id] };
+          }
+          return n;
+      });
+
+      const newData = { ...flowchartData, nodes: updatedNodes };
+      pushToHistory(newData);
+
+  }, [flowchartData, pushToHistory]);
 
   const handleDeleteNode = () => {
     if (!editingNode || !flowchartData) return;
@@ -560,7 +678,19 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="p-4 bg-[var(--bg-alt)] rounded-xl border border-[var(--border-med)]">
-                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">AI Actions</h4>
+                        <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">AI Sub-nodes</h4>
+                        
+                        <div className="mb-4">
+                            <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Focus Aspect (Optional)</label>
+                            <input
+                                type="text"
+                                placeholder="e.g. Cost, Efficiency, History..."
+                                value={subnodeAspect}
+                                onChange={(e) => setSubnodeAspect(e.target.value)}
+                                className="w-full px-3 py-2 bg-[var(--bg-panel)] border border-[var(--border-med)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--text-accent)]"
+                            />
+                        </div>
+
                         <button
                             onClick={handleGenerateSubnodes}
                             disabled={isSubnodesGenerating}
@@ -577,7 +707,6 @@ const App: React.FC = () => {
                                 </>
                             )}
                         </button>
-                        <p className="text-[10px] text-[var(--text-muted)] mt-2 text-center">Creates 3-5 related child nodes.</p>
                     </div>
 
                 </div>
@@ -646,6 +775,7 @@ const App: React.FC = () => {
             setBackgroundColor={setBackgroundColor}
             nodeCount={nodeCount}
             setNodeCount={setNodeCount}
+            onAutoLayout={handleAutoLayout}
           />
       </div>
       

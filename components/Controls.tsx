@@ -28,6 +28,7 @@ interface ControlsProps {
   setBackgroundColor: (color: string) => void;
   nodeCount: number;
   setNodeCount: (count: number) => void;
+  onAutoLayout: (type: 'radial' | 'tree' | 'horizontal') => void;
 }
 
 const PRESET_COLORS = ['#f8fafc', '#ffffff', '#f0f9ff', '#fef2f2', '#f0fdf4', '#fffbeb', '#f3e8ff', '#1e293b'];
@@ -56,7 +57,8 @@ const Controls: React.FC<ControlsProps> = ({
   backgroundColor,
   setBackgroundColor,
   nodeCount,
-  setNodeCount
+  setNodeCount,
+  onAutoLayout
 }) => {
   return (
     <div className="w-full h-full flex flex-col p-6 overflow-y-auto bg-[var(--bg-panel)]/90 backdrop-blur-xl border-r border-[var(--border-light)] shadow-2xl">
@@ -135,6 +137,39 @@ const Controls: React.FC<ControlsProps> = ({
                     {isLoading && <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
                     {isLoading ? 'GENERATING...' : 'GENERATE DIAGRAM'}
                 </button>
+            </div>
+
+            <hr className="border-[var(--border-light)]" />
+
+            {/* Section: Auto Layout */}
+            <div className="space-y-3">
+                <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Auto Layout</h2>
+                <div className="grid grid-cols-3 gap-2">
+                    <button 
+                        onClick={() => onAutoLayout('tree')}
+                        className="flex flex-col items-center justify-center p-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg hover:border-[var(--text-accent)] transition-colors"
+                        title="Tree Layout"
+                    >
+                         <svg className="w-5 h-5 mb-1 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18M8 8l4-4 4 4M8 16l4 4 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                         <span className="text-[10px] font-medium text-[var(--text)]">Tree</span>
+                    </button>
+                     <button 
+                        onClick={() => onAutoLayout('horizontal')}
+                        className="flex flex-col items-center justify-center p-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg hover:border-[var(--text-accent)] transition-colors"
+                        title="Horizontal Tree"
+                    >
+                         <svg className="w-5 h-5 mb-1 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M8 8l-4 4 4 4M16 8l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                         <span className="text-[10px] font-medium text-[var(--text)]">Horiz.</span>
+                    </button>
+                    <button 
+                        onClick={() => onAutoLayout('radial')}
+                        className="flex flex-col items-center justify-center p-2 bg-[var(--bg-alt)] border border-[var(--border-med)] rounded-lg hover:border-[var(--text-accent)] transition-colors"
+                        title="Radial Mind Map"
+                    >
+                         <svg className="w-5 h-5 mb-1 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 9V3M12 15v6M9 12H3M15 12h6M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1l2.1-2.1M17 7l2.1-2.1"/></svg>
+                         <span className="text-[10px] font-medium text-[var(--text)]">Radial</span>
+                    </button>
+                </div>
             </div>
 
             <hr className="border-[var(--border-light)]" />

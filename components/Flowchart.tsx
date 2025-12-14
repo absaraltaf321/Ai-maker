@@ -235,6 +235,7 @@ const DraggableSupportingPanel: React.FC<DraggableSupportingPanelProps> = ({ pan
 
 interface DraggableNodeProps {
     node: NodeType;
+    index: number;
     onPositionChange: (id: string, pos: Position, commit?: boolean) => void;
     onSizeChange: (id: string, size: Size) => void;
     onDoubleClick: (node: NodeType) => void;
@@ -243,7 +244,7 @@ interface DraggableNodeProps {
     accentColor?: string;
 }
 
-const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, onSizeChange, onDoubleClick, zoom, diagramType, accentColor }) => {
+const DraggableNode: React.FC<DraggableNodeProps> = ({ node, index, onPositionChange, onSizeChange, onDoubleClick, zoom, diagramType, accentColor }) => {
     const handleDrag = useCallback((newPos: Position) => {
         onPositionChange(node.id, newPos, false);
     }, [node.id, onPositionChange]);
@@ -292,9 +293,9 @@ const DraggableNode: React.FC<DraggableNodeProps> = ({ node, onPositionChange, o
                 {...dragHandlers}
             />
             
-            {/* Icon Container */}
-            <circle cx={40} cy={iconY} r={24} fill="url(#grad-icon)" stroke={accentColor || "var(--border-light)"} strokeWidth={accentColor ? 1.5 : 1} />
-            <text x={40} y={iconY + 8} fontSize="24" textAnchor="middle" pointerEvents="none">{getIcon(node.icon)}</text>
+            {/* Index Number Circle */}
+            <circle cx={40} cy={iconY} r={20} fill="var(--bg-panel)" stroke={accentColor || "var(--border-dark)"} strokeWidth={2} />
+            <text x={40} y={iconY + 6} fontSize="18" fontWeight="bold" textAnchor="middle" fill="var(--text)" pointerEvents="none">{index}</text>
 
             {/* Text Content */}
             <foreignObject x={80} y={10} width={w - 90} height={h - 20} style={{ pointerEvents: 'none' }}>
@@ -692,10 +693,11 @@ const Flowchart: React.FC<FlowchartProps> = ({
             })}
 
             {/* Nodes */}
-            {data.nodes.map(node => (
+            {data.nodes.map((node, i) => (
                 <DraggableNode 
                     key={node.id} 
                     node={node} 
+                    index={i + 1}
                     onPositionChange={onNodePositionChange} 
                     onSizeChange={onNodeSizeChange}
                     onDoubleClick={onNodeDoubleClick}

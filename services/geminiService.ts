@@ -116,10 +116,16 @@ export const generateEnhancedDescription = async (nodeTitle: string, currentDesc
   }
 };
 
-export const generateSubnodes = async (parentNode: Node, topic: string): Promise<{ title: string; description: string; icon: string }[]> => {
+export const generateSubnodes = async (parentNode: Node, topic: string, aspect?: string): Promise<{ title: string; description: string; icon: string }[]> => {
+    let specificInstruction = "";
+    if (aspect && aspect.trim().length > 0) {
+        specificInstruction = `Focus the generated sub-concepts specifically on this aspect or perspective: "${aspect}".`;
+    }
+
     const prompt = `
       I have a Mind Map/Flowchart about "${topic}".
       I want to expand on the specific node: "${parentNode.title}" (Description: ${parentNode.description}).
+      ${specificInstruction}
       
       Generate 3 to 5 new sub-concepts (child nodes) that stem from this node.
       Return them as a JSON array of objects.
